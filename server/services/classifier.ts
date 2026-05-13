@@ -97,8 +97,8 @@ export async function classifySubmission(content: string, category: string): Pro
 
   // Try both API keys — free first, paid fallback
   const apiKeys = [
-    "AIzaSyC1ygd87K6PoqiqiCHT_CfMi_gF5kxsjD4",  // Paid key (primary)
-    process.env.GEMINI_API_KEY,                     // Free key (fallback)
+    process.env.GEMINI_PAID_API_KEY,  // Paid key (primary)
+    process.env.GEMINI_API_KEY,       // Free key (fallback)
   ].filter(Boolean) as string[];
 
   for (const key of apiKeys) {
