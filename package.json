@@ -1,0 +1,51 @@
+{
+  "name": "project-echo-voa-v2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n FE,BE -c cyan,green \"vp dev\" \"tsx watch server/index.ts\"",
+    "dev:frontend": "vp dev",
+    "dev:backend": "tsx watch server/index.ts",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview",
+    "prepare": "vp config",
+    "db:init": "tsx server/db/init.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "better-sqlite3": "^11.9.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jspdf": "^3.0.1",
+    "marked": "^15.0.12",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.1",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@fontsource/space-grotesk": "^5.2.5",
+    "@tailwindcss/vite": "^4.1.7",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^9.1.2",
+    "tailwindcss": "^4.1.7",
+    "tsx": "^4.19.4",
+    "typescript": "~6.0.2",
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vite-plus": "latest"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+  },
+  "packageManager": "npm@11.14.1"
+}
