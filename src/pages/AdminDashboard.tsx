@@ -7,9 +7,10 @@ import {
 } from "../lib/api";
 import { ClusterAlert } from "../components/ClusterAlert";
 import { PieChart, BarChart, StatusBar } from "../components/Charts";
+import { TopicGroupPanel } from "../components/TopicGroupPanel";
 
 type LoginMode = "exco" | "sl";
-type Tab = "feedback" | "history";
+type Tab = "feedback" | "groups" | "history";
 
 export function AdminDashboard() {
   const [passphrase, setPassphrase] = useState("");
@@ -192,6 +193,9 @@ export function AdminDashboard() {
         <button onClick={() => setActiveTab("feedback")}
           className={`px-6 py-2 text-xs uppercase tracking-widest font-bold border-b-2 transition-all ${activeTab === "feedback" ? `border-${accentColor} text-${accentColor}` : "border-transparent text-echo-dim hover:text-echo-text"}`}>
           FEEDBACK</button>
+        <button onClick={() => setActiveTab("groups")}
+          className={`px-6 py-2 text-xs uppercase tracking-widest font-bold border-b-2 transition-all ${activeTab === "groups" ? `border-${accentColor} text-${accentColor}` : "border-transparent text-echo-dim hover:text-echo-text"}`}>
+          GROUPS</button>
         <button onClick={() => setActiveTab("history")}
           className={`px-6 py-2 text-xs uppercase tracking-widest font-bold border-b-2 transition-all ${activeTab === "history" ? `border-${accentColor} text-${accentColor}` : "border-transparent text-echo-dim hover:text-echo-text"}`}>
           HISTORY</button>
@@ -414,6 +418,10 @@ export function AdminDashboard() {
             )}
           </div>
         </div>
+      )}
+      {/* ═══ GROUPS TAB ═══ */}
+      {activeTab === "groups" && (
+        <TopicGroupPanel passphrase={passphrase} isSL={authRole === "sl"} accentColor={accentColor} />
       )}
     </div>
   );

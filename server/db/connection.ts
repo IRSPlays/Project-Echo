@@ -19,6 +19,12 @@ export function getDb(): Database.Database {
 export function initDb(): void {
   const database = getDb();
 
+  // ── Step 1: Migrations first (must run before schema that refs new columns) ──
+  try {
+    database.exec(`ALTER TABLE submissions ADD COLUMN ai_topic_tag TEXT DEFAULT 'General Issue'`);
+  } catch { /* column already exists, safe to ignore */ }
+
+  // ── Step 2: Create tables and indexes ───────────────────────────────────────
   database.exec(`
     CREATE TABLE IF NOT EXISTS submissions (
       id            TEXT PRIMARY KEY,
@@ -28,6 +34,7 @@ export function initDb(): void {
       tier          INTEGER CHECK (tier IN (1, 2, 3)),
       tier_label    TEXT CHECK (tier_label IN ('Infrastructure', 'Strategic', 'Noise')),
       ai_reasoning  TEXT,
+      ai_topic_tag  TEXT DEFAULT 'General Issue',
       action_status TEXT DEFAULT 'Pending' CHECK (action_status IN ('Pending', 'Investigating', 'Resolved', 'Closed', 'Archived')),
       cluster_id    TEXT,
       session_hash  TEXT NOT NULL,
@@ -36,6 +43,14 @@ export function initDb(): void {
       created_at    TEXT DEFAULT (datetime('now')),
       resolved_at   TEXT,
       closed_at     TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS topic_groups (
+      id          TEXT PRIMARY KEY,
+      tag         TEXT NOT NULL UNIQUE,
+      count       INTEGER DEFAULT 1,
+      last_seen   TEXT DEFAULT (datetime('now')),
+      created_at  TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS clusters (
@@ -68,8 +83,10 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(action_status);
     CREATE INDEX IF NOT EXISTS idx_submissions_created ON submissions(created_at);
     CREATE INDEX IF NOT EXISTS idx_submissions_session ON submissions(session_hash);
+    CREATE INDEX IF NOT EXISTS idx_submissions_topic ON submissions(ai_topic_tag);
     CREATE INDEX IF NOT EXISTS idx_clusters_keyword ON clusters(keyword);
   `);
 
   console.log("[DB] Database initialized at", DB_PATH);
 }
+

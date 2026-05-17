@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { SEED_TAGS } from "../../src/lib/tags.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -6,9 +7,10 @@ export interface TriageResult {
   tier: 1 | 2 | 3;
   label: "Infrastructure" | "Strategic" | "Noise";
   reasoning: string;
+  topic_tag: string;
 }
 
-// ─── Keyword Fallback ────────────────────────────────────────────────────────
+
 
 const INFRA_KEYWORDS = [
   "broken", "fix", "repair", "leak", "fan", "aircon", "toilet", "light",
@@ -32,73 +34,74 @@ function classifyByKeywords(content: string): TriageResult {
   const infraScore = INFRA_KEYWORDS.filter((k) => lower.includes(k)).length;
   const strategicScore = STRATEGIC_KEYWORDS.filter((k) => lower.includes(k)).length;
 
-  // Too short or no keywords → noise
+  // Derive a rough topic tag from keywords
+  let topic_tag = "General Issue";
+  if (lower.includes("canteen") || lower.includes("food")) topic_tag = "Canteen Hygiene";
+  else if (lower.includes("fan") || lower.includes("aircon") || lower.includes("temperature")) topic_tag = "Classroom Temperature";
+  else if (lower.includes("toilet")) topic_tag = "Toilet Maintenance";
+  else if (lower.includes("bully") || lower.includes("harassment")) topic_tag = "Bullying / Harassment";
+  else if (lower.includes("exam") || lower.includes("stress") || lower.includes("homework")) topic_tag = "Exam Stress";
+  else if (lower.includes("teacher")) topic_tag = "Teacher Conduct";
+  else if (lower.includes("wifi") || lower.includes("internet")) topic_tag = "WiFi Connectivity";
+  else if (lower.includes("projector") || lower.includes("av")) topic_tag = "Projector / AV Equipment";
+  else if (lower.includes("water") || lower.includes("cooler")) topic_tag = "Water Cooler Issues";
+  else if (lower.includes("light")) topic_tag = "Lighting Issues";
+
   if (content.trim().length < 10) {
-    return { tier: 3, label: "Noise", reasoning: "Content too short to be actionable." };
+    return { tier: 3, label: "Noise", reasoning: "Content too short to be actionable.", topic_tag: "General Issue" };
   }
 
   if (infraScore > strategicScore && infraScore > 0) {
-    return { tier: 1, label: "Infrastructure", reasoning: `Keyword match: infrastructure-related terms detected (${infraScore} matches).` };
+    return { tier: 1, label: "Infrastructure", reasoning: `Keyword match: infrastructure-related terms detected (${infraScore} matches).`, topic_tag };
   }
 
   if (strategicScore > 0) {
-    return { tier: 2, label: "Strategic", reasoning: `Keyword match: culture/policy terms detected (${strategicScore} matches).` };
+    return { tier: 2, label: "Strategic", reasoning: `Keyword match: culture/policy terms detected (${strategicScore} matches).`, topic_tag };
   }
 
-  // Default: strategic (benefit of the doubt — don't discard student voice)
   if (content.trim().length > 30) {
-    return { tier: 2, label: "Strategic", reasoning: "No strong keyword signals. Defaulting to Strategic review." };
+    return { tier: 2, label: "Strategic", reasoning: "No strong keyword signals. Defaulting to Strategic review.", topic_tag };
   }
 
-  return { tier: 3, label: "Noise", reasoning: "No actionable content detected." };
+  return { tier: 3, label: "Noise", reasoning: "No actionable content detected.", topic_tag: "General Issue" };
 }
 
-// ─── Gemini Classifier ──────────────────────────────────────────────────────
+// ─── Gemini Classifier ───────────────────────────────────────────────────────
 
-let genAI: GoogleGenerativeAI | null = null;
-
-function getGenAI(): GoogleGenerativeAI | null {
-  if (genAI) return genAI;
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn("[Classifier] No GEMINI_API_KEY set. Falling back to keyword matching.");
-    return null;
-  }
-
-  genAI = new GoogleGenerativeAI(apiKey);
-  return genAI;
-}
-
-const TRIAGE_PROMPT = `You are a school operations triage system for "Project Echo." Your job is to classify anonymous student feedback into exactly one of three tiers.
+const TRIAGE_PROMPT = `You are a school operations triage system for "Project Echo." Classify anonymous student feedback.
 
 TIER DEFINITIONS:
-- Tier 1 (Infrastructure): Physical, logistical, or facility-related issues that the Operations team can directly fix. Examples: "Fan broken in 3E2", "Canteen food is cold", "Toilet on level 3 has no soap."
-- Tier 2 (Strategic): Cultural, policy, academic, or systemic issues requiring EXCO/leadership strategy. Examples: "Library is too loud during recess", "Too much homework from Math dept", "Students feel unheard in assembly."
-- Tier 3 (Noise): Non-actionable content — jokes, spam, profanity-only, gibberish, or rants with no specific issue. Examples: "lol", "this school sucks", "asdfghjkl", "I hate everything."
+- Tier 1 (Infrastructure): Physical, logistical, or facility-related issues. Examples: "Fan broken in 3E2", "Canteen food is cold", "Toilet on level 3 has no soap."
+- Tier 2 (Strategic): Cultural, policy, academic, or systemic issues. Examples: "Library is too loud", "Too much homework", "Students feel unheard."
+- Tier 3 (Noise): Non-actionable — jokes, spam, gibberish, rants with no specific issue.
+
+TOPIC TAG INSTRUCTIONS:
+Assign a short, specific topic tag (2–5 words) that captures the operational issue.
+Prefer tags from this reference list (use the EXACT wording if it fits):
+${SEED_TAGS.join(", ")}
+If none fit, create a new concise tag. Be consistent — similar issues should get the same tag.
 
 RULES:
-1. Give students the benefit of the doubt. If a report COULD be actionable, classify it as Tier 1 or 2, NOT Tier 3.
-2. Profanity alone does not make something Noise — look for the underlying issue.
-3. Be specific in your reasoning (1-2 sentences max).
+1. Give benefit of the doubt. If possibly actionable, use Tier 1 or 2, not 3.
+2. Profanity alone ≠ Noise — look for the underlying issue.
+3. Reasoning: 1-2 sentences max.
 
-CATEGORY CONTEXT: The student selected the category "{category}" when submitting.
+CATEGORY CONTEXT: Student selected "{category}".
 
 STUDENT FEEDBACK:
 "{content}"
 
 Respond with ONLY valid JSON:
-{"tier": 1|2|3, "label": "Infrastructure"|"Strategic"|"Noise", "reasoning": "..."}`;
+{"tier": 1|2|3, "label": "Infrastructure"|"Strategic"|"Noise", "reasoning": "...", "topic_tag": "..."}`;
 
 export async function classifySubmission(content: string, category: string): Promise<TriageResult> {
   const prompt = TRIAGE_PROMPT
     .replace("{content}", content.replace(/"/g, '\\"'))
     .replace("{category}", category);
 
-  // Try both API keys — free first, paid fallback
   const apiKeys = [
-    process.env.GEMINI_PAID_API_KEY,  // Paid key (primary)
-    process.env.GEMINI_API_KEY,       // Free key (fallback)
+    process.env.GEMINI_PAID_API_KEY,
+    process.env.GEMINI_API_KEY,
   ].filter(Boolean) as string[];
 
   for (const key of apiKeys) {
@@ -112,7 +115,7 @@ export async function classifySubmission(content: string, category: string): Pro
           generationConfig: {
             responseMimeType: "application/json",
             temperature: 0.1,
-            maxOutputTokens: 200,
+            maxOutputTokens: 250,
           },
         });
 
@@ -121,6 +124,7 @@ export async function classifySubmission(content: string, category: string): Pro
 
         if (![1, 2, 3].includes(parsed.tier)) throw new Error("Invalid tier");
         if (!["Infrastructure", "Strategic", "Noise"].includes(parsed.label)) throw new Error("Invalid label");
+        if (!parsed.topic_tag || typeof parsed.topic_tag !== "string") parsed.topic_tag = "General Issue";
 
         return parsed;
       } catch (err) {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createSubmission, updateSubmissionStatus, escalateToSL } from "../db/queries.js";
+import { createSubmission, updateSubmissionStatus, escalateToSL, upsertTopicGroup } from "../db/queries.js";
 import { classifySubmission } from "../services/classifier.js";
 import { processForClusters } from "../services/cluster.js";
 import { generateSessionHash, isRateLimited, validateSubmission } from "../services/spam.js";
@@ -43,6 +43,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     // Store submission
     const submissionId = uuidv4();
+    const topicTag = triage.topic_tag || "General Issue";
     createSubmission({
       id: submissionId,
       content: content.trim(),
@@ -51,11 +52,15 @@ router.post("/", async (req: Request, res: Response) => {
       tier,
       tier_label: triage.label as any,
       ai_reasoning: triage.reasoning,
+      ai_topic_tag: topicTag,
       action_status: "Pending",
       session_hash: sessionHash,
       cluster_id: null,
       ticket_pin_hash: ticketPinHash,
     });
+
+    // Register/update topic group
+    upsertTopicGroup(topicTag);
 
     // Process for clustering (fire and forget)
     const clusters = processForClusters(content.trim());

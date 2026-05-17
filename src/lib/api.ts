@@ -177,3 +177,63 @@ export async function fetchSLSubmissions(slPassphrase: string) {
   if (!res.ok) throw new Error("Unauthorized.");
   return res.json();
 }
+
+// ─── Topic Groups ─────────────────────────────────────────────────────────────
+
+export async function fetchTopicGroups(passphrase: string, isSL: boolean) {
+  const res = await fetch(`${API_BASE}/admin/topic-groups`, {
+    headers: adminHeaders(passphrase, isSL),
+  });
+  if (!res.ok) throw new Error("Failed to fetch topic groups.");
+  return res.json();
+}
+
+export async function fetchTopicGroup(passphrase: string, isSL: boolean, tag: string) {
+  const res = await fetch(`${API_BASE}/admin/topic-groups/${encodeURIComponent(tag)}`, {
+    headers: adminHeaders(passphrase, isSL),
+  });
+  if (!res.ok) throw new Error("Failed to fetch topic group.");
+  return res.json();
+}
+
+export async function sendMassReply(
+  passphrase: string, isSL: boolean, tag: string,
+  content: string, markInvestigating: boolean
+) {
+  const res = await fetch(`${API_BASE}/admin/topic-groups/${encodeURIComponent(tag)}/mass-reply`, {
+    method: "POST",
+    headers: adminHeaders(passphrase, isSL),
+    body: JSON.stringify({ content, markInvestigating }),
+  });
+  if (!res.ok) throw new Error("Mass reply failed.");
+  return res.json();
+}
+
+export async function renameTopicGroup(passphrase: string, isSL: boolean, oldTag: string, newTag: string) {
+  const res = await fetch(`${API_BASE}/admin/topic-groups/${encodeURIComponent(oldTag)}/rename`, {
+    method: "PATCH",
+    headers: adminHeaders(passphrase, isSL),
+    body: JSON.stringify({ newTag }),
+  });
+  if (!res.ok) throw new Error("Rename failed.");
+  return res.json();
+}
+
+export async function deleteTopicGroup(passphrase: string, isSL: boolean, tag: string) {
+  const res = await fetch(`${API_BASE}/admin/topic-groups/${encodeURIComponent(tag)}`, {
+    method: "DELETE",
+    headers: adminHeaders(passphrase, isSL),
+  });
+  if (!res.ok) throw new Error("Delete failed.");
+  return res.json();
+}
+
+export async function retagSubmission(passphrase: string, isSL: boolean, id: string, newTag: string) {
+  const res = await fetch(`${API_BASE}/admin/submissions/${id}/retag`, {
+    method: "PATCH",
+    headers: adminHeaders(passphrase, isSL),
+    body: JSON.stringify({ newTag }),
+  });
+  if (!res.ok) throw new Error("Retag failed.");
+  return res.json();
+}

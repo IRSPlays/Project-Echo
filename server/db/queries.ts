@@ -11,6 +11,7 @@ export interface Submission {
   tier: 1 | 2 | 3;
   tier_label: "Infrastructure" | "Strategic" | "Noise";
   ai_reasoning: string;
+  ai_topic_tag: string;
   action_status: "Pending" | "Investigating" | "Resolved" | "Closed" | "Archived";
   cluster_id: string | null;
   session_hash: string;
@@ -20,6 +21,15 @@ export interface Submission {
   resolved_at: string | null;
   closed_at: string | null;
 }
+
+export interface TopicGroup {
+  id: string;
+  tag: string;
+  count: number;
+  last_seen: string;
+  created_at: string;
+}
+
 
 export interface Cluster {
   id: string;
@@ -79,9 +89,9 @@ export function createSubmission(
   const stmt = db.prepare(`
     INSERT INTO submissions (
       id, content, proposed_solution, category, tier, tier_label, ai_reasoning,
-      action_status, session_hash, cluster_id, ticket_pin_hash
+      ai_topic_tag, action_status, session_hash, cluster_id, ticket_pin_hash
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
   `);
 
@@ -93,6 +103,7 @@ export function createSubmission(
     sub.tier,
     sub.tier_label,
     sub.ai_reasoning,
+    sub.ai_topic_tag,
     sub.action_status,
     sub.session_hash,
     sub.cluster_id,
@@ -275,4 +286,91 @@ export function insertGlobalUpdate(content: string, authorRole: "EXCO" | "School
 export function getGlobalUpdates(): GlobalUpdate[] {
   const db = getDb();
   return db.prepare("SELECT * FROM global_updates ORDER BY created_at DESC").all() as GlobalUpdate[];
+}
+
+// ─── Topic Groups ─────────────────────────────────────────────────────────────
+
+export function upsertTopicGroup(tag: string): TopicGroup {
+  const db = getDb();
+  const existing = db.prepare("SELECT * FROM topic_groups WHERE tag = ?").get(tag) as TopicGroup | undefined;
+
+  if (existing) {
+    db.prepare("UPDATE topic_groups SET count = count + 1, last_seen = datetime('now') WHERE tag = ?").run(tag);
+    return db.prepare("SELECT * FROM topic_groups WHERE tag = ?").get(tag) as TopicGroup;
+  }
+
+  const id = uuidv4();
+  db.prepare("INSERT INTO topic_groups (id, tag) VALUES (?, ?)").run(id, tag);
+  return db.prepare("SELECT * FROM topic_groups WHERE id = ?").get(id) as TopicGroup;
+}
+
+export function getTopicGroups(): TopicGroup[] {
+  const db = getDb();
+  return db.prepare("SELECT * FROM topic_groups ORDER BY count DESC").all() as TopicGroup[];
+}
+
+export function getSubmissionsByTopicTag(tag: string): Submission[] {
+  const db = getDb();
+  return db.prepare("SELECT * FROM submissions WHERE ai_topic_tag = ? ORDER BY created_at DESC").all(tag) as Submission[];
+}
+
+export function massReplyToGroup(
+  tag: string,
+  content: string,
+  authorRole: "EXCO" | "School Leader",
+  markInvestigating: boolean = false
+): { repliedCount: number } {
+  const db = getDb();
+
+  // Get all non-closed, non-archived tickets in this group
+  const submissions = db.prepare(`
+    SELECT id FROM submissions
+    WHERE ai_topic_tag = ?
+    AND action_status NOT IN ('Closed', 'Archived')
+  `).all(tag) as { id: string }[];
+
+  const insertReplyStmt = db.prepare(`
+    INSERT INTO ticket_replies (id, submission_id, author_role, content)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  const updateStatusStmt = db.prepare(`
+    UPDATE submissions SET action_status = 'Investigating' WHERE id = ? AND action_status = 'Pending'
+  `);
+
+  const massInsert = db.transaction(() => {
+    for (const sub of submissions) {
+      insertReplyStmt.run(uuidv4(), sub.id, authorRole, content);
+      if (markInvestigating) updateStatusStmt.run(sub.id);
+    }
+  });
+
+  massInsert();
+  return { repliedCount: submissions.length };
+}
+
+export function retagSubmission(submissionId: string, newTag: string): void {
+  const db = getDb();
+  const old = db.prepare("SELECT ai_topic_tag FROM submissions WHERE id = ?").get(submissionId) as { ai_topic_tag: string } | undefined;
+
+  db.prepare("UPDATE submissions SET ai_topic_tag = ? WHERE id = ?").run(newTag, submissionId);
+
+  // Update counts: decrement old tag, upsert new tag
+  if (old?.ai_topic_tag && old.ai_topic_tag !== newTag) {
+    db.prepare("UPDATE topic_groups SET count = MAX(0, count - 1) WHERE tag = ?").run(old.ai_topic_tag);
+    upsertTopicGroup(newTag);
+  }
+}
+
+export function deleteTopicGroup(tag: string): void {
+  const db = getDb();
+  // Re-tag all submissions in this group to "General Issue"
+  db.prepare("UPDATE submissions SET ai_topic_tag = 'General Issue' WHERE ai_topic_tag = ?").run(tag);
+  db.prepare("DELETE FROM topic_groups WHERE tag = ?").run(tag);
+}
+
+export function renameTopicGroup(oldTag: string, newTag: string): void {
+  const db = getDb();
+  db.prepare("UPDATE submissions SET ai_topic_tag = ? WHERE ai_topic_tag = ?").run(newTag, oldTag);
+  db.prepare("UPDATE topic_groups SET tag = ? WHERE tag = ?").run(newTag, oldTag);
 }

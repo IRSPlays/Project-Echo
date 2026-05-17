@@ -14,6 +14,13 @@ import {
   insertGlobalUpdate,
   getGlobalUpdates,
   getSubmissionsByDateRange,
+  getTopicGroups,
+  getSubmissionsByTopicTag,
+  massReplyToGroup,
+  retagSubmission,
+  deleteTopicGroup,
+  renameTopicGroup,
+  upsertTopicGroup,
 } from "../db/queries.js";
 
 const router = Router();
@@ -340,6 +347,71 @@ Keep it professional, concise, and data-driven. Use bullet points.`;
     console.error("[Admin] History summary error:", err);
     res.status(500).json({ error: "Failed to generate summary." });
   }
+});
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOPIC GROUPS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** GET /topic-groups — List all AI topic groups */
+router.get("/topic-groups", anyAdminAuth, (_req: Request, res: Response) => {
+  const groups = getTopicGroups();
+  res.json(groups);
+});
+
+/** GET /topic-groups/:tag — Get all submissions in a topic group */
+router.get("/topic-groups/:tag", anyAdminAuth, (req: Request, res: Response) => {
+  const tag = decodeURIComponent(req.params.tag);
+  const submissions = getSubmissionsByTopicTag(tag);
+  res.json({ tag, submissions });
+});
+
+/** POST /topic-groups/:tag/mass-reply — Send reply to ALL active tickets in group */
+router.post("/topic-groups/:tag/mass-reply", anyAdminAuth, (req: Request, res: Response) => {
+  const tag = decodeURIComponent(req.params.tag);
+  const { content, markInvestigating } = req.body;
+  const isSL = req.headers["x-sl-passphrase"] === process.env.SL_PASSPHRASE;
+  const authorRole = isSL ? "School Leader" : "EXCO";
+
+  if (!content?.trim()) {
+    res.status(400).json({ error: "Reply content required." });
+    return;
+  }
+
+  const { repliedCount } = massReplyToGroup(tag, content.trim(), authorRole, !!markInvestigating);
+  console.log(`[Admin] Mass reply sent to ${repliedCount} tickets in group "${tag}" by ${authorRole}`);
+  res.json({ success: true, repliedCount });
+});
+
+/** PATCH /topic-groups/:tag/rename — Rename a topic group */
+router.patch("/topic-groups/:tag/rename", anyAdminAuth, (req: Request, res: Response) => {
+  const oldTag = decodeURIComponent(req.params.tag);
+  const { newTag } = req.body;
+  if (!newTag?.trim()) {
+    res.status(400).json({ error: "newTag required." });
+    return;
+  }
+  renameTopicGroup(oldTag, newTag.trim());
+  res.json({ success: true });
+});
+
+/** DELETE /topic-groups/:tag — Delete a group (tickets moved to General Issue) */
+router.delete("/topic-groups/:tag", anyAdminAuth, (req: Request, res: Response) => {
+  const tag = decodeURIComponent(req.params.tag);
+  deleteTopicGroup(tag);
+  res.json({ success: true });
+});
+
+/** PATCH /submissions/:id/retag — Manually retag a single ticket */
+router.patch("/submissions/:id/retag", anyAdminAuth, (req: Request, res: Response) => {
+  const { newTag } = req.body;
+  if (!newTag?.trim()) {
+    res.status(400).json({ error: "newTag required." });
+    return;
+  }
+  retagSubmission(req.params.id, newTag.trim());
+  // Ensure the new tag group exists
+  upsertTopicGroup(newTag.trim());
+  res.json({ success: true });
 });
 
 export default router;
