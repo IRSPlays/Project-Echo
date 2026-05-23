@@ -22,6 +22,16 @@ app.use(express.json({ limit: "10kb" }));
 // Trust proxy for correct IP in session hash
 app.set("trust proxy", 1);
 
+// Ensure DB is initialized before handling any requests
+let dbInitialized = false;
+app.use(async (_req, _res, next) => {
+  if (!dbInitialized) {
+    await initDb();
+    dbInitialized = true;
+  }
+  next();
+});
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 app.get("/api/echo/health", (_req, res) => {
@@ -45,26 +55,30 @@ app.use((_req, res) => {
 
 // ─── Initialize & Start ─────────────────────────────────────────────────────
 
-initDb();
+// Export the app for Vercel Serverless Functions
+export default app;
 
-app.listen(PORT, () => {
-  console.log("");
-  console.log("  ╔══════════════════════════════════════╗");
-  console.log("  ║       PROJECT ECHO — BACKEND         ║");
-  console.log("  ║       Anonymous Triage System         ║");
-  console.log(`  ║       http://localhost:${PORT}            ║`);
-  console.log("  ╚══════════════════════════════════════╝");
-  console.log("");
-  console.log(`  [API]    /api/echo/health`);
-  console.log(`  [API]    /api/echo/submit       (POST)`);
-  console.log(`  [API]    /api/echo/admin/*       (GET/PATCH)`);
-  console.log(`  [API]    /api/echo/export        (GET)`);
-  console.log("");
-
-  if (!process.env.GEMINI_API_KEY) {
-    console.log("  ⚠  GEMINI_API_KEY not set — using keyword fallback classifier");
-  } else {
-    console.log("  ✓  Gemini 3.1 Flash Lite classifier active");
-  }
-  console.log("");
-});
+// If we are not running in a serverless environment (e.g. locally via `npm run dev`), start the server
+if (process.env.NODE_ENV !== "production" || process.env.RENDER) {
+  app.listen(PORT, () => {
+    console.log("");
+    console.log("  ╔══════════════════════════════════════╗");
+    console.log("  ║       PROJECT ECHO — BACKEND         ║");
+    console.log("  ║       Anonymous Triage System         ║");
+    console.log(`  ║       http://localhost:${PORT}            ║`);
+    console.log("  ╚══════════════════════════════════════╝");
+    console.log("");
+    console.log(`  [API]    /api/echo/health`);
+    console.log(`  [API]    /api/echo/submit       (POST)`);
+    console.log(`  [API]    /api/echo/admin/*       (GET/PATCH)`);
+    console.log(`  [API]    /api/echo/export        (GET)`);
+    console.log("");
+  
+    if (!process.env.GEMINI_API_KEY) {
+      console.log("  ⚠  GEMINI_API_KEY not set — using keyword fallback classifier");
+    } else {
+      console.log("  ✓  Gemini 3.1 Flash Lite classifier active");
+    }
+    console.log("");
+  });
+}

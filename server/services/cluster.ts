@@ -42,12 +42,12 @@ export function extractKeywords(content: string): string[] {
  * Process a submission's content for clustering.
  * Updates keyword counts and returns any clusters that hit the threshold.
  */
-export function processForClusters(content: string): Cluster[] {
+export async function processForClusters(content: string): Promise<Cluster[]> {
   const keywords = extractKeywords(content);
   const triggeredClusters: Cluster[] = [];
 
   for (const keyword of keywords) {
-    const cluster = upsertCluster(keyword);
+    const cluster = await upsertCluster(keyword);
     if (cluster.count >= 5) {
       triggeredClusters.push(cluster);
     }

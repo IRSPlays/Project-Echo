@@ -1,12 +1,12 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { getSubmissionById, getRepliesForSubmission, insertReply } from "../db/queries.js";
 import crypto from "node:crypto";
 
 const router = Router();
 
 // Middleware to verify ticket pin
-const verifyTicketAuth = (req: Request, res: Response, next: Function) => {
+const verifyTicketAuth = async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const pin = req.headers["x-ticket-pin"] as string;
 
@@ -15,7 +15,7 @@ const verifyTicketAuth = (req: Request, res: Response, next: Function) => {
     return;
   }
 
-  const submission = getSubmissionById(id);
+  const submission = await getSubmissionById(id);
   if (!submission) {
     res.status(404).json({ error: "Ticket not found." });
     return;
@@ -36,9 +36,9 @@ const verifyTicketAuth = (req: Request, res: Response, next: Function) => {
  * GET /api/echo/ticket/:id
  * Retrieve a specific ticket and its replies
  */
-router.get("/:id", verifyTicketAuth, (req: Request, res: Response) => {
+router.get("/:id", verifyTicketAuth, async (req: Request, res: Response) => {
   const submission = (req as any).submission;
-  const replies = getRepliesForSubmission(submission.id);
+  const replies = await getRepliesForSubmission(submission.id);
 
   // Strip sensitive info before returning
   const { session_hash, ticket_pin_hash, ...safeSubmission } = submission;
@@ -53,7 +53,7 @@ router.get("/:id", verifyTicketAuth, (req: Request, res: Response) => {
  * POST /api/echo/ticket/:id/reply
  * Student replies to their ticket
  */
-router.post("/:id/reply", verifyTicketAuth, (req: Request, res: Response) => {
+router.post("/:id/reply", verifyTicketAuth, async (req: Request, res: Response) => {
   const { content } = req.body;
   const submission = (req as any).submission;
 
@@ -62,7 +62,7 @@ router.post("/:id/reply", verifyTicketAuth, (req: Request, res: Response) => {
     return;
   }
 
-  const reply = insertReply(submission.id, "Student", content.trim());
+  const reply = await insertReply(submission.id, "Student", content.trim());
   res.status(201).json(reply);
 });
 

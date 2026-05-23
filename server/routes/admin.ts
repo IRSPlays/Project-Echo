@@ -69,36 +69,40 @@ function anyAdminAuth(req: Request, res: Response, next: NextFunction): void {
 // PUBLIC ROUTES (no auth — used by Status Board)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get("/stats", (_req: Request, res: Response) => {
+router.get("/stats", async (_req: Request, res: Response) => {
   try {
-    res.json(getStats());
+    const stats = await getStats();
+    res.json(stats);
   } catch (err) {
     console.error("[Admin] Stats error:", err);
     res.status(500).json({ error: "Failed to fetch stats." });
   }
 });
 
-router.get("/clusters", (_req: Request, res: Response) => {
+router.get("/clusters", async (_req: Request, res: Response) => {
   try {
-    res.json(getClusters(5));
+    const clusters = await getClusters(5);
+    res.json(clusters);
   } catch (err) {
     console.error("[Admin] Clusters error:", err);
     res.status(500).json({ error: "Failed to fetch clusters." });
   }
 });
 
-router.get("/clusters/all", (_req: Request, res: Response) => {
+router.get("/clusters/all", async (_req: Request, res: Response) => {
   try {
-    res.json(getAllClusters());
+    const clusters = await getAllClusters();
+    res.json(clusters);
   } catch (err) {
     console.error("[Admin] All clusters error:", err);
     res.status(500).json({ error: "Failed to fetch clusters." });
   }
 });
 
-router.get("/global_updates", (_req: Request, res: Response) => {
+router.get("/global_updates", async (_req: Request, res: Response) => {
   try {
-    res.json(getGlobalUpdates());
+    const updates = await getGlobalUpdates();
+    res.json(updates);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch updates." });
   }
@@ -108,10 +112,10 @@ router.get("/global_updates", (_req: Request, res: Response) => {
 // EXCO ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get("/submissions", excoAuth, (req: Request, res: Response) => {
+router.get("/submissions", excoAuth, async (req: Request, res: Response) => {
   try {
     const { category, tier, status, limit, offset, search, dateFrom, dateTo } = req.query;
-    const result = getSubmissions({
+    const result = await getSubmissions({
       category: category as string,
       tier: tier ? Number(tier) : undefined,
       status: status as string,
@@ -132,7 +136,7 @@ router.get("/submissions", excoAuth, (req: Request, res: Response) => {
 // STATUS UPDATE (EXCO or SL can both change status)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.patch("/submissions/:id", anyAdminAuth, (req: Request, res: Response) => {
+router.patch("/submissions/:id", anyAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -143,7 +147,7 @@ router.patch("/submissions/:id", anyAdminAuth, (req: Request, res: Response) => 
       return;
     }
 
-    const updated = updateSubmissionStatus(id, status);
+    const updated = await updateSubmissionStatus(id, status);
     if (!updated) {
       res.status(404).json({ error: "Submission not found." });
       return;
@@ -158,9 +162,9 @@ router.patch("/submissions/:id", anyAdminAuth, (req: Request, res: Response) => 
   }
 });
 
-router.post("/submissions/:id/escalate", excoAuth, (req: Request, res: Response) => {
+router.post("/submissions/:id/escalate", excoAuth, async (req: Request, res: Response) => {
   try {
-    escalateToSL(req.params.id);
+    await escalateToSL(req.params.id);
     console.log(`[Admin] Escalated: ${req.params.id}`);
     res.json({ success: true });
   } catch (err) {
@@ -172,18 +176,18 @@ router.post("/submissions/:id/escalate", excoAuth, (req: Request, res: Response)
 // TICKET DETAIL & REPLY (EXCO or SL)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get("/ticket/:id", anyAdminAuth, (req: Request, res: Response) => {
+router.get("/ticket/:id", anyAdminAuth, async (req: Request, res: Response) => {
   try {
-    const sub = getSubmissionById(req.params.id);
+    const sub = await getSubmissionById(req.params.id);
     if (!sub) { res.status(404).json({ error: "Not found." }); return; }
-    const replies = getRepliesForSubmission(sub.id);
+    const replies = await getRepliesForSubmission(sub.id);
     res.json({ ticket: sub, replies });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch ticket." });
   }
 });
 
-router.post("/ticket/:id/reply", anyAdminAuth, (req: Request, res: Response) => {
+router.post("/ticket/:id/reply", anyAdminAuth, async (req: Request, res: Response) => {
   try {
     const { content } = req.body;
     if (!content || !content.trim()) {
@@ -191,14 +195,14 @@ router.post("/ticket/:id/reply", anyAdminAuth, (req: Request, res: Response) => 
       return;
     }
     const role = (req as any).adminRole;
-    const reply = insertReply(req.params.id, role, content.trim());
+    const reply = await insertReply(req.params.id, role, content.trim());
     res.json(reply);
   } catch (err) {
     res.status(500).json({ error: "Failed to reply." });
   }
 });
 
-router.post("/global_updates", anyAdminAuth, (req: Request, res: Response) => {
+router.post("/global_updates", anyAdminAuth, async (req: Request, res: Response) => {
   try {
     const { content } = req.body;
     if (!content || !content.trim()) {
@@ -206,7 +210,7 @@ router.post("/global_updates", anyAdminAuth, (req: Request, res: Response) => {
       return;
     }
     const role = (req as any).adminRole;
-    const update = insertGlobalUpdate(content.trim(), role);
+    const update = await insertGlobalUpdate(content.trim(), role);
     res.json(update);
   } catch (err) {
     res.status(500).json({ error: "Failed to post update." });
@@ -217,9 +221,9 @@ router.post("/global_updates", anyAdminAuth, (req: Request, res: Response) => {
 // SL ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get("/sl/submissions", slAuth, (_req: Request, res: Response) => {
+router.get("/sl/submissions", slAuth, async (_req: Request, res: Response) => {
   try {
-    const result = getSubmissions({ limit: 200 });
+    const result = await getSubmissions({ limit: 200 });
     const escalated = result.data.filter((s) => s.escalated_to_sl === 1);
     res.json({ data: escalated, total: escalated.length });
   } catch (err) {
@@ -239,7 +243,7 @@ router.post("/history/summary", anyAdminAuth, async (req: Request, res: Response
       return;
     }
 
-    const submissions = getSubmissionsByDateRange(dateFrom, dateTo);
+    const submissions = await getSubmissionsByDateRange(dateFrom, dateTo);
 
     if (submissions.length === 0) {
       res.json({
@@ -267,7 +271,6 @@ router.post("/history/summary", anyAdminAuth, async (req: Request, res: Response
       },
     };
 
-    // Try Gemini summary — try free key first, then paid key on failure
     let summary = "";
 
     const feedbackList = submissions
@@ -307,10 +310,9 @@ Provide a concise operational summary in the following format:
 
 Keep it professional, concise, and data-driven. Use bullet points.`;
 
-    // Try both API keys — free first, paid as fallback
     const apiKeys = [
-      process.env.GEMINI_PAID_API_KEY,  // Paid key (primary)
-      process.env.GEMINI_API_KEY,       // Free key (fallback)
+      process.env.GEMINI_PAID_API_KEY,
+      process.env.GEMINI_API_KEY,
     ].filter(Boolean) as string[];
 
     let aiSuccess = false;
@@ -333,7 +335,7 @@ Keep it professional, concise, and data-driven. Use bullet points.`;
           break;
         } catch (aiErr) {
           console.error(`[Admin] AI attempt ${attempt + 1} failed:`, (aiErr as Error).message);
-          if (attempt === 0) await new Promise((r) => setTimeout(r, 1500)); // wait before retry
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
         }
       }
     }
@@ -353,20 +355,20 @@ Keep it professional, concise, and data-driven. Use bullet points.`;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** GET /topic-groups — List all AI topic groups */
-router.get("/topic-groups", anyAdminAuth, (_req: Request, res: Response) => {
-  const groups = getTopicGroups();
+router.get("/topic-groups", anyAdminAuth, async (_req: Request, res: Response) => {
+  const groups = await getTopicGroups();
   res.json(groups);
 });
 
 /** GET /topic-groups/:tag — Get all submissions in a topic group */
-router.get("/topic-groups/:tag", anyAdminAuth, (req: Request, res: Response) => {
+router.get("/topic-groups/:tag", anyAdminAuth, async (req: Request, res: Response) => {
   const tag = decodeURIComponent(req.params.tag);
-  const submissions = getSubmissionsByTopicTag(tag);
+  const submissions = await getSubmissionsByTopicTag(tag);
   res.json({ tag, submissions });
 });
 
 /** POST /topic-groups/:tag/mass-reply — Send reply to ALL active tickets in group */
-router.post("/topic-groups/:tag/mass-reply", anyAdminAuth, (req: Request, res: Response) => {
+router.post("/topic-groups/:tag/mass-reply", anyAdminAuth, async (req: Request, res: Response) => {
   const tag = decodeURIComponent(req.params.tag);
   const { content, markInvestigating } = req.body;
   const isSL = req.headers["x-sl-passphrase"] === process.env.SL_PASSPHRASE;
@@ -377,40 +379,40 @@ router.post("/topic-groups/:tag/mass-reply", anyAdminAuth, (req: Request, res: R
     return;
   }
 
-  const { repliedCount } = massReplyToGroup(tag, content.trim(), authorRole, !!markInvestigating);
+  const { repliedCount } = await massReplyToGroup(tag, content.trim(), authorRole, !!markInvestigating);
   console.log(`[Admin] Mass reply sent to ${repliedCount} tickets in group "${tag}" by ${authorRole}`);
   res.json({ success: true, repliedCount });
 });
 
 /** PATCH /topic-groups/:tag/rename — Rename a topic group */
-router.patch("/topic-groups/:tag/rename", anyAdminAuth, (req: Request, res: Response) => {
+router.patch("/topic-groups/:tag/rename", anyAdminAuth, async (req: Request, res: Response) => {
   const oldTag = decodeURIComponent(req.params.tag);
   const { newTag } = req.body;
   if (!newTag?.trim()) {
     res.status(400).json({ error: "newTag required." });
     return;
   }
-  renameTopicGroup(oldTag, newTag.trim());
+  await renameTopicGroup(oldTag, newTag.trim());
   res.json({ success: true });
 });
 
 /** DELETE /topic-groups/:tag — Delete a group (tickets moved to General Issue) */
-router.delete("/topic-groups/:tag", anyAdminAuth, (req: Request, res: Response) => {
+router.delete("/topic-groups/:tag", anyAdminAuth, async (req: Request, res: Response) => {
   const tag = decodeURIComponent(req.params.tag);
-  deleteTopicGroup(tag);
+  await deleteTopicGroup(tag);
   res.json({ success: true });
 });
 
 /** PATCH /submissions/:id/retag — Manually retag a single ticket */
-router.patch("/submissions/:id/retag", anyAdminAuth, (req: Request, res: Response) => {
+router.patch("/submissions/:id/retag", anyAdminAuth, async (req: Request, res: Response) => {
   const { newTag } = req.body;
   if (!newTag?.trim()) {
     res.status(400).json({ error: "newTag required." });
     return;
   }
-  retagSubmission(req.params.id, newTag.trim());
+  await retagSubmission(req.params.id, newTag.trim());
   // Ensure the new tag group exists
-  upsertTopicGroup(newTag.trim());
+  await upsertTopicGroup(newTag.trim());
   res.json({ success: true });
 });
 

@@ -44,7 +44,7 @@ router.post("/", async (req: Request, res: Response) => {
     // Store submission
     const submissionId = uuidv4();
     const topicTag = triage.topic_tag || "General Issue";
-    createSubmission({
+    await createSubmission({
       id: submissionId,
       content: content.trim(),
       proposed_solution: proposed_solution?.trim() || null,
@@ -60,19 +60,20 @@ router.post("/", async (req: Request, res: Response) => {
     });
 
     // Register/update topic group
-    upsertTopicGroup(topicTag);
+    await upsertTopicGroup(topicTag);
 
     // Process for clustering (fire and forget)
-    const clusters = processForClusters(content.trim());
+    // We don't necessarily need to await it to return the response, but doing so prevents unhandled rejections
+    const clusters = await processForClusters(content.trim());
 
     // Auto-archive noise
     if (tier === 3) {
-      updateSubmissionStatus(submissionId, "Archived");
+      await updateSubmissionStatus(submissionId, "Archived");
     }
 
     // Auto-escalate Infrastructure (T1) to School Leaders
     if (tier === 1) {
-      escalateToSL(submissionId);
+      await escalateToSL(submissionId);
       console.log(`[Echo] Auto-escalated T1 to SL: ${submissionId}`);
     }
 

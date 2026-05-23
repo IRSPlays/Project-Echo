@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
-    "better-sqlite3": "^11.9.1",
+    "@libsql/client": "^0.17.3",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -29,7 +29,6 @@
     "@fontsource/jetbrains-mono": "^5.2.5",
     "@fontsource/space-grotesk": "^5.2.5",
     "@tailwindcss/vite": "^4.1.7",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.2",
     "@types/react": "^19.1.4",

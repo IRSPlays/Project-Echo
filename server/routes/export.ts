@@ -25,12 +25,12 @@ router.use(adminAuth);
  * GET /api/echo/export?format=md|json
  * Generate a report for SL meetings.
  */
-router.get("/", (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const format = (req.query.format as string) || "md";
-    const stats = getStats();
-    const { data: submissions } = getSubmissions({ limit: 200 });
-    const clusters = getClusters(5);
+    const stats = await getStats();
+    const { data: submissions } = await getSubmissions({ limit: 200 });
+    const clusters = await getClusters(5);
 
     if (format === "json") {
       res.json({ stats, submissions, clusters, generated_at: new Date().toISOString() });
