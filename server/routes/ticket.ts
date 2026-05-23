@@ -7,7 +7,7 @@ const router = Router();
 
 // Middleware to verify ticket pin
 const verifyTicketAuth = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const pin = req.headers["x-ticket-pin"] as string;
 
   if (!pin) {

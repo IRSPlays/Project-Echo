@@ -1,6 +1,11 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createSubmission, updateSubmissionStatus, escalateToSL, upsertTopicGroup } from "../db/queries.js";
+import {
+  createSubmission,
+  updateSubmissionStatus,
+  escalateToSL,
+  upsertTopicGroup,
+} from "../db/queries.js";
 import { classifySubmission } from "../services/classifier.js";
 import { processForClusters } from "../services/cluster.js";
 import { generateSessionHash, isRateLimited, validateSubmission } from "../services/spam.js";
@@ -26,7 +31,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     // Spam check
     const sessionHash = generateSessionHash(req);
-    if (isRateLimited(sessionHash)) {
+    if (await isRateLimited(sessionHash)) {
       res.status(429).json({
         error: "Rate limit exceeded. Maximum 5 submissions per hour.",
       });
@@ -78,12 +83,12 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     console.log(
-      `[Echo] New submission: ${submissionId} | Tier ${tier} (${triage.label}) | Category: ${category}`
+      `[Echo] New submission: ${submissionId} | Tier ${tier} (${triage.label}) | Category: ${category}`,
     );
 
     if (clusters.length > 0) {
       console.log(
-        `[Echo] Cluster alerts: ${clusters.map((c) => `"${c.keyword}" (${c.count})`).join(", ")}`
+        `[Echo] Cluster alerts: ${clusters.map((c) => `"${c.keyword}" (${c.count})`).join(", ")}`,
       );
     }
 

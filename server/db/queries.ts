@@ -1,4 +1,5 @@
 import { getDb } from "./connection.js";
+import type { InValue } from "@libsql/client";
 import { v4 as uuidv4 } from "uuid";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ export interface Stats {
 // ─── Submissions ─────────────────────────────────────────────────────────────
 
 export async function createSubmission(
-  sub: Omit<Submission, "created_at" | "resolved_at" | "closed_at" | "escalated_to_sl">
+  sub: Omit<Submission, "created_at" | "resolved_at" | "closed_at" | "escalated_to_sl">,
 ): Promise<void> {
   const db = getDb();
   await db.execute({
@@ -106,8 +107,8 @@ export async function createSubmission(
       sub.action_status,
       sub.session_hash,
       sub.cluster_id,
-      sub.ticket_pin_hash
-    ]
+      sub.ticket_pin_hash,
+    ],
   });
 }
 
@@ -117,10 +118,12 @@ export async function getSubmissionById(id: string): Promise<Submission | undefi
   return res.rows[0] as unknown as Submission | undefined;
 }
 
-export async function getSubmissions(filters: SubmissionFilters = {}): Promise<{ data: Submission[]; total: number }> {
+export async function getSubmissions(
+  filters: SubmissionFilters = {},
+): Promise<{ data: Submission[]; total: number }> {
   const db = getDb();
   const conditions: string[] = [];
-  const params: unknown[] = [];
+  const params: InValue[] = [];
 
   if (filters.category) {
     conditions.push("category = ?");
@@ -153,19 +156,22 @@ export async function getSubmissions(filters: SubmissionFilters = {}): Promise<{
 
   const countRes = await db.execute({
     sql: `SELECT COUNT(*) as count FROM submissions ${where}`,
-    args: params
+    args: params,
   });
   const total = Number(countRes.rows[0].count);
 
   const dataRes = await db.execute({
     sql: `SELECT * FROM submissions ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    args: [...params, limit, offset]
+    args: [...params, limit, offset],
   });
 
   return { data: dataRes.rows as unknown as Submission[], total };
 }
 
-export async function updateSubmissionStatus(id: string, status: string): Promise<Submission | undefined> {
+export async function updateSubmissionStatus(
+  id: string,
+  status: string,
+): Promise<Submission | undefined> {
   const db = getDb();
   const resolvedAt = status === "Resolved" ? new Date().toISOString() : null;
   const closedAt = status === "Closed" ? new Date().toISOString() : null;
@@ -178,20 +184,23 @@ export async function updateSubmissionStatus(id: string, status: string): Promis
           closed_at = COALESCE(?, closed_at)
       WHERE id = ?
     `,
-    args: [status, resolvedAt, closedAt, id]
+    args: [status, resolvedAt, closedAt, id],
   });
 
   return getSubmissionById(id);
 }
 
-export async function getSubmissionCountBySession(sessionHash: string, windowMinutes: number = 60): Promise<number> {
+export async function getSubmissionCountBySession(
+  sessionHash: string,
+  windowMinutes: number = 60,
+): Promise<number> {
   const db = getDb();
   const res = await db.execute({
     sql: `
       SELECT COUNT(*) as count FROM submissions
       WHERE session_hash = ? AND created_at > datetime('now', ?)
     `,
-    args: [sessionHash, `-${windowMinutes} minutes`]
+    args: [sessionHash, `-${windowMinutes} minutes`],
   });
   return Number(res.rows[0].count);
 }
@@ -204,7 +213,7 @@ export async function getSubmissionsByDateRange(from: string, to: string): Promi
       WHERE date(created_at) >= date(?) AND date(created_at) <= date(?)
       ORDER BY created_at DESC
     `,
-    args: [from, to]
+    args: [from, to],
   });
   return res.rows as unknown as Submission[];
 }
@@ -213,7 +222,10 @@ export async function getSubmissionsByDateRange(from: string, to: string): Promi
 
 export async function upsertCluster(keyword: string): Promise<Cluster> {
   const db = getDb();
-  const res = await db.execute({ sql: "SELECT * FROM clusters WHERE keyword = ?", args: [keyword] });
+  const res = await db.execute({
+    sql: "SELECT * FROM clusters WHERE keyword = ?",
+    args: [keyword],
+  });
   const existing = res.rows[0];
 
   if (existing) {
@@ -228,22 +240,31 @@ export async function upsertCluster(keyword: string): Promise<Cluster> {
         END
         WHERE keyword = ?
       `,
-      args: [keyword]
+      args: [keyword],
     });
 
-    const updated = await db.execute({ sql: "SELECT * FROM clusters WHERE keyword = ?", args: [keyword] });
+    const updated = await db.execute({
+      sql: "SELECT * FROM clusters WHERE keyword = ?",
+      args: [keyword],
+    });
     return updated.rows[0] as unknown as Cluster;
   }
 
   const id = uuidv4();
-  await db.execute({ sql: "INSERT INTO clusters (id, keyword) VALUES (?, ?)", args: [id, keyword] });
+  await db.execute({
+    sql: "INSERT INTO clusters (id, keyword) VALUES (?, ?)",
+    args: [id, keyword],
+  });
   const newRow = await db.execute({ sql: "SELECT * FROM clusters WHERE id = ?", args: [id] });
   return newRow.rows[0] as unknown as Cluster;
 }
 
 export async function getClusters(minCount: number = 5): Promise<Cluster[]> {
   const db = getDb();
-  const res = await db.execute({ sql: "SELECT * FROM clusters WHERE count >= ? ORDER BY count DESC", args: [minCount] });
+  const res = await db.execute({
+    sql: "SELECT * FROM clusters WHERE count >= ? ORDER BY count DESC",
+    args: [minCount],
+  });
   return res.rows as unknown as Cluster[];
 }
 
@@ -269,7 +290,7 @@ export async function getStats(): Promise<Stats> {
     db.execute("SELECT COUNT(*) as c FROM submissions WHERE tier = 2"),
     db.execute("SELECT COUNT(*) as c FROM submissions WHERE tier = 3"),
     db.execute("SELECT COUNT(*) as c FROM clusters WHERE count >= 5"),
-    db.execute("SELECT COUNT(*) as c FROM submissions WHERE date(created_at) = date('now')")
+    db.execute("SELECT COUNT(*) as c FROM submissions WHERE date(created_at) = date('now')"),
   ]);
 
   return {
@@ -289,7 +310,11 @@ export async function getStats(): Promise<Stats> {
 
 // ─── Ticket Replies ──────────────────────────────────────────────────────────
 
-export async function insertReply(submissionId: string, authorRole: "Student" | "EXCO" | "School Leader", content: string): Promise<TicketReply> {
+export async function insertReply(
+  submissionId: string,
+  authorRole: "Student" | "EXCO" | "School Leader",
+  content: string,
+): Promise<TicketReply> {
   const db = getDb();
   const id = uuidv4();
   await db.execute({
@@ -297,7 +322,7 @@ export async function insertReply(submissionId: string, authorRole: "Student" | 
       INSERT INTO ticket_replies (id, submission_id, author_role, content)
       VALUES (?, ?, ?, ?)
     `,
-    args: [id, submissionId, authorRole, content]
+    args: [id, submissionId, authorRole, content],
   });
 
   const res = await db.execute({ sql: "SELECT * FROM ticket_replies WHERE id = ?", args: [id] });
@@ -306,18 +331,27 @@ export async function insertReply(submissionId: string, authorRole: "Student" | 
 
 export async function getRepliesForSubmission(submissionId: string): Promise<TicketReply[]> {
   const db = getDb();
-  const res = await db.execute({ sql: "SELECT * FROM ticket_replies WHERE submission_id = ? ORDER BY created_at ASC", args: [submissionId] });
+  const res = await db.execute({
+    sql: "SELECT * FROM ticket_replies WHERE submission_id = ? ORDER BY created_at ASC",
+    args: [submissionId],
+  });
   return res.rows as unknown as TicketReply[];
 }
 
 export async function escalateToSL(submissionId: string): Promise<void> {
   const db = getDb();
-  await db.execute({ sql: "UPDATE submissions SET escalated_to_sl = 1 WHERE id = ?", args: [submissionId] });
+  await db.execute({
+    sql: "UPDATE submissions SET escalated_to_sl = 1 WHERE id = ?",
+    args: [submissionId],
+  });
 }
 
 // ─── Global Updates ──────────────────────────────────────────────────────────
 
-export async function insertGlobalUpdate(content: string, authorRole: "EXCO" | "School Leader"): Promise<GlobalUpdate> {
+export async function insertGlobalUpdate(
+  content: string,
+  authorRole: "EXCO" | "School Leader",
+): Promise<GlobalUpdate> {
   const db = getDb();
   const id = uuidv4();
   await db.execute({
@@ -325,7 +359,7 @@ export async function insertGlobalUpdate(content: string, authorRole: "EXCO" | "
       INSERT INTO global_updates (id, content, author_role)
       VALUES (?, ?, ?)
     `,
-    args: [id, content, authorRole]
+    args: [id, content, authorRole],
   });
 
   const res = await db.execute({ sql: "SELECT * FROM global_updates WHERE id = ?", args: [id] });
@@ -346,8 +380,14 @@ export async function upsertTopicGroup(tag: string): Promise<TopicGroup> {
   const existing = res.rows[0];
 
   if (existing) {
-    await db.execute({ sql: "UPDATE topic_groups SET count = count + 1, last_seen = datetime('now') WHERE tag = ?", args: [tag] });
-    const updated = await db.execute({ sql: "SELECT * FROM topic_groups WHERE tag = ?", args: [tag] });
+    await db.execute({
+      sql: "UPDATE topic_groups SET count = count + 1, last_seen = datetime('now') WHERE tag = ?",
+      args: [tag],
+    });
+    const updated = await db.execute({
+      sql: "SELECT * FROM topic_groups WHERE tag = ?",
+      args: [tag],
+    });
     return updated.rows[0] as unknown as TopicGroup;
   }
 
@@ -365,7 +405,10 @@ export async function getTopicGroups(): Promise<TopicGroup[]> {
 
 export async function getSubmissionsByTopicTag(tag: string): Promise<Submission[]> {
   const db = getDb();
-  const res = await db.execute({ sql: "SELECT * FROM submissions WHERE ai_topic_tag = ? ORDER BY created_at DESC", args: [tag] });
+  const res = await db.execute({
+    sql: "SELECT * FROM submissions WHERE ai_topic_tag = ? ORDER BY created_at DESC",
+    args: [tag],
+  });
   return res.rows as unknown as Submission[];
 }
 
@@ -373,7 +416,7 @@ export async function massReplyToGroup(
   tag: string,
   content: string,
   authorRole: "EXCO" | "School Leader",
-  markInvestigating: boolean = false
+  markInvestigating: boolean = false,
 ): Promise<{ repliedCount: number }> {
   const db = getDb();
 
@@ -384,9 +427,9 @@ export async function massReplyToGroup(
       WHERE ai_topic_tag = ?
       AND action_status NOT IN ('Closed', 'Archived')
     `,
-    args: [tag]
+    args: [tag],
   });
-  
+
   const submissions = res.rows as unknown as { id: string }[];
 
   const txn = await db.transaction("write");
@@ -395,12 +438,12 @@ export async function massReplyToGroup(
     for (const sub of submissions) {
       await txn.execute({
         sql: `INSERT INTO ticket_replies (id, submission_id, author_role, content) VALUES (?, ?, ?, ?)`,
-        args: [uuidv4(), sub.id, authorRole, content]
+        args: [uuidv4(), sub.id, authorRole, content],
       });
       if (markInvestigating) {
         await txn.execute({
           sql: `UPDATE submissions SET action_status = 'Investigating' WHERE id = ? AND action_status = 'Pending'`,
-          args: [sub.id]
+          args: [sub.id],
         });
       }
     }
@@ -415,26 +458,44 @@ export async function massReplyToGroup(
 
 export async function retagSubmission(submissionId: string, newTag: string): Promise<void> {
   const db = getDb();
-  const res = await db.execute({ sql: "SELECT ai_topic_tag FROM submissions WHERE id = ?", args: [submissionId] });
+  const res = await db.execute({
+    sql: "SELECT ai_topic_tag FROM submissions WHERE id = ?",
+    args: [submissionId],
+  });
   const old = res.rows[0] as unknown as { ai_topic_tag: string } | undefined;
 
-  await db.execute({ sql: "UPDATE submissions SET ai_topic_tag = ? WHERE id = ?", args: [newTag, submissionId] });
+  await db.execute({
+    sql: "UPDATE submissions SET ai_topic_tag = ? WHERE id = ?",
+    args: [newTag, submissionId],
+  });
 
   // Update counts: decrement old tag, upsert new tag
   if (old?.ai_topic_tag && old.ai_topic_tag !== newTag) {
-    await db.execute({ sql: "UPDATE topic_groups SET count = MAX(0, count - 1) WHERE tag = ?", args: [old.ai_topic_tag] });
+    await db.execute({
+      sql: "UPDATE topic_groups SET count = MAX(0, count - 1) WHERE tag = ?",
+      args: [old.ai_topic_tag],
+    });
     await upsertTopicGroup(newTag);
   }
 }
 
 export async function deleteTopicGroup(tag: string): Promise<void> {
   const db = getDb();
-  await db.execute({ sql: "UPDATE submissions SET ai_topic_tag = 'General Issue' WHERE ai_topic_tag = ?", args: [tag] });
+  await db.execute({
+    sql: "UPDATE submissions SET ai_topic_tag = 'General Issue' WHERE ai_topic_tag = ?",
+    args: [tag],
+  });
   await db.execute({ sql: "DELETE FROM topic_groups WHERE tag = ?", args: [tag] });
 }
 
 export async function renameTopicGroup(oldTag: string, newTag: string): Promise<void> {
   const db = getDb();
-  await db.execute({ sql: "UPDATE submissions SET ai_topic_tag = ? WHERE ai_topic_tag = ?", args: [newTag, oldTag] });
-  await db.execute({ sql: "UPDATE topic_groups SET tag = ? WHERE tag = ?", args: [newTag, oldTag] });
+  await db.execute({
+    sql: "UPDATE submissions SET ai_topic_tag = ? WHERE ai_topic_tag = ?",
+    args: [newTag, oldTag],
+  });
+  await db.execute({
+    sql: "UPDATE topic_groups SET tag = ? WHERE tag = ?",
+    args: [newTag, oldTag],
+  });
 }

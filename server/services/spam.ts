@@ -21,8 +21,8 @@ export function generateSessionHash(req: Request): string {
  * Check if a session has exceeded the rate limit.
  * Returns true if the session is rate-limited.
  */
-export function isRateLimited(sessionHash: string): boolean {
-  const count = getSubmissionCountBySession(sessionHash, 60);
+export async function isRateLimited(sessionHash: string): Promise<boolean> {
+  const count = await getSubmissionCountBySession(sessionHash, 60);
   return count >= MAX_SUBMISSIONS_PER_HOUR;
 }
 

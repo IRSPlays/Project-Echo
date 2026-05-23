@@ -1,4 +1,5 @@
-import { createClient, Client } from "@libsql/client";
+import { createClient } from "@libsql/client";
+import type { Client } from "@libsql/client";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,8 +23,12 @@ export async function initDb(): Promise<void> {
 
   // ── Step 1: Migrations first (must run before schema that refs new columns) ──
   try {
-    await database.execute(`ALTER TABLE submissions ADD COLUMN ai_topic_tag TEXT DEFAULT 'General Issue'`);
-  } catch { /* column already exists, safe to ignore */ }
+    await database.execute(
+      `ALTER TABLE submissions ADD COLUMN ai_topic_tag TEXT DEFAULT 'General Issue'`,
+    );
+  } catch {
+    /* column already exists, safe to ignore */
+  }
 
   // ── Step 2: Create tables and indexes ───────────────────────────────────────
   await database.executeMultiple(`
@@ -88,5 +93,8 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_clusters_keyword ON clusters(keyword);
   `);
 
-  console.log("[DB] Database initialized at", process.env.TURSO_DATABASE_URL ? "Turso" : LOCAL_DB_PATH);
+  console.log(
+    "[DB] Database initialized at",
+    process.env.TURSO_DATABASE_URL ? "Turso" : LOCAL_DB_PATH,
+  );
 }

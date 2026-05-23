@@ -143,11 +143,13 @@ router.patch("/submissions/:id", anyAdminAuth, async (req: Request, res: Respons
 
     const validStatuses = ["Pending", "Investigating", "Resolved", "Closed", "Archived"];
     if (!validStatuses.includes(status)) {
-      res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      res
+        .status(400)
+        .json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       return;
     }
 
-    const updated = await updateSubmissionStatus(id, status);
+    const updated = await updateSubmissionStatus(id as string, status as string);
     if (!updated) {
       res.status(404).json({ error: "Submission not found." });
       return;
@@ -164,7 +166,7 @@ router.patch("/submissions/:id", anyAdminAuth, async (req: Request, res: Respons
 
 router.post("/submissions/:id/escalate", excoAuth, async (req: Request, res: Response) => {
   try {
-    await escalateToSL(req.params.id);
+    await escalateToSL(req.params.id as string);
     console.log(`[Admin] Escalated: ${req.params.id}`);
     res.json({ success: true });
   } catch (err) {
@@ -178,8 +180,11 @@ router.post("/submissions/:id/escalate", excoAuth, async (req: Request, res: Res
 
 router.get("/ticket/:id", anyAdminAuth, async (req: Request, res: Response) => {
   try {
-    const sub = await getSubmissionById(req.params.id);
-    if (!sub) { res.status(404).json({ error: "Not found." }); return; }
+    const sub = await getSubmissionById(req.params.id as string);
+    if (!sub) {
+      res.status(404).json({ error: "Not found." });
+      return;
+    }
     const replies = await getRepliesForSubmission(sub.id);
     res.json({ ticket: sub, replies });
   } catch (err) {
@@ -195,7 +200,7 @@ router.post("/ticket/:id/reply", anyAdminAuth, async (req: Request, res: Respons
       return;
     }
     const role = (req as any).adminRole;
-    const reply = await insertReply(req.params.id, role, content.trim());
+    const reply = await insertReply(req.params.id as string, role, content.trim());
     res.json(reply);
   } catch (err) {
     res.status(500).json({ error: "Failed to reply." });
@@ -260,9 +265,13 @@ router.post("/history/summary", anyAdminAuth, async (req: Request, res: Response
       tier1: submissions.filter((s) => s.tier === 1).length,
       tier2: submissions.filter((s) => s.tier === 2).length,
       tier3: submissions.filter((s) => s.tier === 3).length,
-      resolved: submissions.filter((s) => s.action_status === "Resolved" || s.action_status === "Closed").length,
+      resolved: submissions.filter(
+        (s) => s.action_status === "Resolved" || s.action_status === "Closed",
+      ).length,
       closed: submissions.filter((s) => s.action_status === "Closed").length,
-      pending: submissions.filter((s) => s.action_status === "Pending" || s.action_status === "Investigating").length,
+      pending: submissions.filter(
+        (s) => s.action_status === "Pending" || s.action_status === "Investigating",
+      ).length,
       categories: {
         facilities: submissions.filter((s) => s.category === "Facilities").length,
         culture: submissions.filter((s) => s.category === "Culture").length,
@@ -274,7 +283,10 @@ router.post("/history/summary", anyAdminAuth, async (req: Request, res: Response
     let summary = "";
 
     const feedbackList = submissions
-      .map((s, i) => `${i + 1}. [T${s.tier} ${s.tier_label}] [${s.category}] [${s.action_status}] ${s.content}${s.proposed_solution ? ` | Student solution: ${s.proposed_solution}` : ""}`)
+      .map(
+        (s, i) =>
+          `${i + 1}. [T${s.tier} ${s.tier_label}] [${s.category}] [${s.action_status}] ${s.content}${s.proposed_solution ? ` | Student solution: ${s.proposed_solution}` : ""}`,
+      )
       .join("\n");
 
     const prompt = `You are an operations analyst for a school triage system (Project Echo). Analyze the following ${submissions.length} student feedback submissions from ${dateFrom} to ${dateTo}.
@@ -310,10 +322,9 @@ Provide a concise operational summary in the following format:
 
 Keep it professional, concise, and data-driven. Use bullet points.`;
 
-    const apiKeys = [
-      process.env.GEMINI_PAID_API_KEY,
-      process.env.GEMINI_API_KEY,
-    ].filter(Boolean) as string[];
+    const apiKeys = [process.env.GEMINI_PAID_API_KEY, process.env.GEMINI_API_KEY].filter(
+      Boolean,
+    ) as string[];
 
     let aiSuccess = false;
     for (const key of apiKeys) {
@@ -362,14 +373,14 @@ router.get("/topic-groups", anyAdminAuth, async (_req: Request, res: Response) =
 
 /** GET /topic-groups/:tag — Get all submissions in a topic group */
 router.get("/topic-groups/:tag", anyAdminAuth, async (req: Request, res: Response) => {
-  const tag = decodeURIComponent(req.params.tag);
+  const tag = decodeURIComponent(req.params.tag as string);
   const submissions = await getSubmissionsByTopicTag(tag);
   res.json({ tag, submissions });
 });
 
 /** POST /topic-groups/:tag/mass-reply — Send reply to ALL active tickets in group */
 router.post("/topic-groups/:tag/mass-reply", anyAdminAuth, async (req: Request, res: Response) => {
-  const tag = decodeURIComponent(req.params.tag);
+  const tag = decodeURIComponent(req.params.tag as string);
   const { content, markInvestigating } = req.body;
   const isSL = req.headers["x-sl-passphrase"] === process.env.SL_PASSPHRASE;
   const authorRole = isSL ? "School Leader" : "EXCO";
@@ -379,14 +390,21 @@ router.post("/topic-groups/:tag/mass-reply", anyAdminAuth, async (req: Request, 
     return;
   }
 
-  const { repliedCount } = await massReplyToGroup(tag, content.trim(), authorRole, !!markInvestigating);
-  console.log(`[Admin] Mass reply sent to ${repliedCount} tickets in group "${tag}" by ${authorRole}`);
+  const { repliedCount } = await massReplyToGroup(
+    tag,
+    content.trim(),
+    authorRole,
+    !!markInvestigating,
+  );
+  console.log(
+    `[Admin] Mass reply sent to ${repliedCount} tickets in group "${tag}" by ${authorRole}`,
+  );
   res.json({ success: true, repliedCount });
 });
 
 /** PATCH /topic-groups/:tag/rename — Rename a topic group */
 router.patch("/topic-groups/:tag/rename", anyAdminAuth, async (req: Request, res: Response) => {
-  const oldTag = decodeURIComponent(req.params.tag);
+  const oldTag = decodeURIComponent(req.params.tag as string);
   const { newTag } = req.body;
   if (!newTag?.trim()) {
     res.status(400).json({ error: "newTag required." });
@@ -398,7 +416,7 @@ router.patch("/topic-groups/:tag/rename", anyAdminAuth, async (req: Request, res
 
 /** DELETE /topic-groups/:tag — Delete a group (tickets moved to General Issue) */
 router.delete("/topic-groups/:tag", anyAdminAuth, async (req: Request, res: Response) => {
-  const tag = decodeURIComponent(req.params.tag);
+  const tag = decodeURIComponent(req.params.tag as string);
   await deleteTopicGroup(tag);
   res.json({ success: true });
 });
@@ -410,7 +428,7 @@ router.patch("/submissions/:id/retag", anyAdminAuth, async (req: Request, res: R
     res.status(400).json({ error: "newTag required." });
     return;
   }
-  await retagSubmission(req.params.id, newTag.trim());
+  await retagSubmission(req.params.id as string, newTag.trim());
   // Ensure the new tag group exists
   await upsertTopicGroup(newTag.trim());
   res.json({ success: true });
